@@ -1,0 +1,20 @@
+# Node / vendor
+node_modules/
+vendor/
+
+# Environment
+.env
+.env.local
+
+# System files
+.DS_Store
+.vscode/
+.idea/
+
+# Logs and databases
+*.log
+*.sql
+db_data/
+
+# Composer
+composer.lock
