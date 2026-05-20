@@ -1,43 +1,74 @@
 #!/usr/bin/env groovy
 pipeline {
   agent any
-  environment {
-    IMAGE = "abilul/mysystem:${env.BUILD_NUMBER}"
+  
+  triggers {
+    // GitHub webhook trigger - automatically triggers on push
+    githubPush()
+    // Fallback: poll SCM every 15 minutes if webhook unavailable
+    pollSCM('H/15 * * * *')
   }
+  
+  environment {
+    REGISTRY = "docker.io"
+    REGISTRY_CREDS = "docker-hub-credentials"
+    IMAGE_NAME = "inyakult-maker/mysystem"
+    IMAGE = "${REGISTRY}/${IMAGE_NAME}:${BUILD_NUMBER}"
+    IMAGE_LATEST = "${REGISTRY}/${IMAGE_NAME}:latest"
+  }
+  
   stages {
     stage('Checkout') {
       steps {
         checkout scm
       }
     }
+    
     stage('Build Docker Image') {
       steps {
         script {
-          dockerImage = docker.build(env.IMAGE)
+          echo "Building Docker image: ${IMAGE}"
+          dockerImage = docker.build("${IMAGE_NAME}:${BUILD_NUMBER}")
         }
       }
     }
-    stage('Push Image (disabled by default)') {
-      when { expression { false } }
+    
+    stage('Push to Docker Hub') {
       steps {
-        withCredentials([usernamePassword(credentialsId: 'registry-credentials', usernameVariable: 'REG_USER', passwordVariable: 'REG_PASS')]) {
-          script {
-            docker.withRegistry('', 'registry-credentials') {
-              dockerImage.push()
-              dockerImage.push('latest')
-            }
+        script {
+          echo "Pushing image to Docker Hub: ${IMAGE}"
+          withCredentials([usernamePassword(credentialsId: "${REGISTRY_CREDS}", usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+            sh '''
+              echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+              docker tag ${IMAGE_NAME}:${BUILD_NUMBER} ${IMAGE}
+              docker tag ${IMAGE_NAME}:${BUILD_NUMBER} ${IMAGE_LATEST}
+              docker push ${IMAGE}
+              docker push ${IMAGE_LATEST}
+              docker logout
+            '''
           }
         }
       }
     }
-    stage('Deploy using docker-compose (disabled by default)') {
+    
+    stage('Deploy (Optional)') {
       when { expression { false } }
       steps {
-        sh 'docker-compose up -d --build'
+        script {
+          echo "Deploying with docker-compose..."
+          sh 'docker-compose up -d --build'
+        }
       }
     }
   }
+  
   post {
+    success {
+      echo "Build and push successful! Image available at: ${IMAGE}"
+    }
+    failure {
+      echo "Build or push failed. Check logs above."
+    }
     always {
       archiveArtifacts artifacts: '**/logs/*.log', allowEmptyArchive: true
     }
