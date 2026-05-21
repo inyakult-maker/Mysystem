@@ -6,9 +6,3 @@ git config --global user.name "Your Name"
 git commit -m "Initial commit: add project, CI, Docker, Jenkins scripts"
 
 # Force push to GitHub
-git push --force-with-lease origin main -u
-
-cd C:\xampp\htdocs\studentmanagement
-
-# Run the automated push script with your GitHub details
-.\scripts\push_to_github.ps1 -GitName "inyakult-maker" -GitEmail "https://github.com/inyakult-maker.com" -RepoUrl "https://github.com/inyakult-maker/Mysystem.git"
