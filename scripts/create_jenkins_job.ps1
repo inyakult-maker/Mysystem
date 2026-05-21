@@ -9,9 +9,39 @@ $env:JOB_NAME = 'mysystem-pipeline'
 .\scripts\create_jenkins_job.ps1
 #>
 
+param(
+  [string]$JenkinsUrl = $null,
+  [string]$JenkinsUser = $null,
+  [string]$JenkinsToken = $null,
+  [string]$JobName = $null
+)
 
+# Prefer explicit parameters, fall back to environment variables
+$jenkinsUrl = if ($JenkinsUrl) { $JenkinsUrl } else { $env:JENKINS_URL }
+$user = if ($JenkinsUser) { $JenkinsUser } else { $env:JENKINS_USER }
+$token = if ($JenkinsToken) { $JenkinsToken } else { $env:JENKINS_TOKEN }
+$jobName = if ($JobName) { $JobName } else { $env:JOB_NAME }
 
+if (-not $jenkinsUrl -or -not $user -or -not $token -or -not $jobName) {
+  Write-Error "Required parameters or environment variables missing. Provide either parameters or set these environment variables: JENKINS_URL, JENKINS_USER, JENKINS_TOKEN, JOB_NAME.`nExamples (PowerShell):`n$env:JENKINS_URL = 'http://localhost:8080'`n$env:JENKINS_USER = 'yahiko'`n$env:JENKINS_TOKEN = 'token'`n$env:JOB_NAME = 'mysystem-pipeline'`nOr run the script with parameters:`n.\scripts\create_jenkins_job.ps1 -JenkinsUrl 'http://localhost:8080' -JenkinsUser 'yahiko' -JenkinsToken 'token' -JobName 'mysystem-pipeline'"
+  exit 1
+}
 
+# Prepare Basic Auth header
+$pair = "{0}:{1}" -f $user, $token
+$bytes = [System.Text.Encoding]::ASCII.GetBytes($pair)
+$base64 = [Convert]::ToBase64String($bytes)
+$headers = @{ Authorization = "Basic $base64" }
+
+# Try to get Jenkins crumb (if enabled)
+try {
+    $crumbResp = Invoke-RestMethod -Uri "$jenkinsUrl/crumbIssuer/api/json" -Headers $headers -Method Get -ErrorAction Stop
+    if ($crumbResp -and $crumbResp.crumb) {
+        $headers['Jenkins-Crumb'] = $crumbResp.crumb
+    }
+} catch {
+    # If crumb issuer not available or request failed, continue without crumb
+}
 
 $jobXml = @'
 <flow-definition plugin="workflow-job">
